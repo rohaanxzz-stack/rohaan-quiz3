@@ -1,14 +1,18 @@
+# app.py
+
+```python
 import streamlit as st
 from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.decomposition import PCA
 import pandas as pd
 import numpy as np
-import plotly.express as px
+import matplotlib.pyplot as plt
+import seaborn as sns
 
-# --------------------------------------------------
+# -----------------------------------------------------
 # PAGE CONFIG
-# --------------------------------------------------
+# -----------------------------------------------------
 
 st.set_page_config(
     page_title="Semantic Similarity Analyzer",
@@ -16,54 +20,43 @@ st.set_page_config(
     layout="wide"
 )
 
-# --------------------------------------------------
+# -----------------------------------------------------
 # TITLE
-# --------------------------------------------------
+# -----------------------------------------------------
 
 st.title("🧠 Semantic Similarity Analyzer")
+
 st.markdown("""
-Analyze semantic similarity between words, sentences, and short text using a
-free pretrained NLP model.
+Analyze semantic similarity between words, sentences,
+and short text using a free pretrained NLP model.
 
-**Model:** all-MiniLM-L6-v2
+**Model Used:** all-MiniLM-L6-v2
 """)
 
-# --------------------------------------------------
+# -----------------------------------------------------
 # SIDEBAR
-# --------------------------------------------------
+# -----------------------------------------------------
 
-st.sidebar.header("About")
+st.sidebar.header("Application Settings")
 
-st.sidebar.info("""
-This application uses the pretrained
-Sentence Transformer model:
-
-all-MiniLM-L6-v2
-
-No preprocessing.
-No model training.
-No paid API.
-""")
-
-# --------------------------------------------------
-# INPUT
-# --------------------------------------------------
-
-default_text = """Artificial Intelligence is transforming education.
-Machine Learning helps computers learn from data.
-Deep Learning is a branch of AI.
-Cats are domestic animals.
-Dogs are loyal companions."""
-
-user_input = st.text_area(
-    "Enter one sentence per line",
-    default_text,
-    height=220
+threshold = st.sidebar.slider(
+    "Similarity Threshold",
+    min_value=0.0,
+    max_value=1.0,
+    value=0.70,
+    step=0.01
 )
 
-# --------------------------------------------------
+st.sidebar.info(f"""
+Current Threshold: {threshold}
+
+Similarity scores above this value
+are classified as Similar.
+""")
+
+# -----------------------------------------------------
 # MODEL
-# --------------------------------------------------
+# -----------------------------------------------------
 
 @st.cache_resource
 def load_model():
@@ -71,9 +64,26 @@ def load_model():
 
 model = load_model()
 
-# --------------------------------------------------
+# -----------------------------------------------------
+# INPUT
+# -----------------------------------------------------
+
+default_text = """Artificial Intelligence is transforming education.
+Machine Learning helps computers learn from data.
+Deep Learning is a branch of AI.
+Cats are domestic animals.
+Dogs are loyal companions.
+Education is becoming smarter with AI."""
+
+user_input = st.text_area(
+    "Enter one sentence per line",
+    default_text,
+    height=220
+)
+
+# -----------------------------------------------------
 # BUTTON
-# --------------------------------------------------
+# -----------------------------------------------------
 
 if st.button("Analyze Similarity"):
 
@@ -95,19 +105,15 @@ if st.button("Analyze Similarity"):
             embeddings
         )
 
-    # --------------------------------------------------
-    # SIMILARITY DATAFRAME
-    # --------------------------------------------------
-
     sim_df = pd.DataFrame(
         similarity_matrix,
         index=texts,
         columns=texts
     )
 
-    # --------------------------------------------------
-    # FIND BEST PAIR
-    # --------------------------------------------------
+    # -----------------------------------------------------
+    # BEST PAIR
+    # -----------------------------------------------------
 
     max_score = -1
     best_pair = ("", "")
@@ -116,6 +122,7 @@ if st.button("Analyze Similarity"):
         for j in range(i + 1, len(texts)):
 
             if similarity_matrix[i][j] > max_score:
+
                 max_score = similarity_matrix[i][j]
 
                 best_pair = (
@@ -123,11 +130,21 @@ if st.button("Analyze Similarity"):
                     texts[j]
                 )
 
-    # --------------------------------------------------
-    # METRICS
-    # --------------------------------------------------
+    # -----------------------------------------------------
+    # DASHBOARD
+    # -----------------------------------------------------
 
-    col1, col2, col3 = st.columns(3)
+    similar_pairs = 0
+
+    for i in range(len(texts)):
+        for j in range(i + 1, len(texts)):
+
+            if similarity_matrix[i][j] >= threshold:
+                similar_pairs += 1
+
+    st.subheader("📈 Dashboard")
+
+    col1, col2, col3, col4 = st.columns(4)
 
     col1.metric(
         "Total Sentences",
@@ -144,157 +161,282 @@ if st.button("Analyze Similarity"):
         f"{max_score:.4f}"
     )
 
+    col4.metric(
+        "Pairs Above Threshold",
+        similar_pairs
+    )
+
     st.success(
         f"""
 Most Similar Pair:
 
-'{best_pair[0]}'
+{best_pair[0]}
 
-and
+AND
 
-'{best_pair[1]}'
+{best_pair[1]}
 
-Similarity Score: {max_score:.4f}
+Similarity Score = {max_score:.4f}
 """
     )
 
-    # --------------------------------------------------
-    # TABLE
-    # --------------------------------------------------
+    # -----------------------------------------------------
+    # SIMILARITY MATRIX
+    # -----------------------------------------------------
 
-    st.subheader("Similarity Matrix")
+    st.subheader("📋 Similarity Matrix")
 
     st.dataframe(
         sim_df,
         use_container_width=True
     )
 
-    # --------------------------------------------------
-    # GRAPH 1
+    # -----------------------------------------------------
+    # THRESHOLD ANALYSIS
+    # -----------------------------------------------------
+
+    st.subheader("🎯 Threshold Analysis")
+
+    threshold_results = []
+
+    for i in range(len(texts)):
+        for j in range(i + 1, len(texts)):
+
+            score = similarity_matrix[i][j]
+
+            threshold_results.append({
+                "Sentence 1": texts[i],
+                "Sentence 2": texts[j],
+                "Similarity": round(score, 4),
+                "Status":
+                    "Similar"
+                    if score >= threshold
+                    else "Not Similar"
+            })
+
+    threshold_df = pd.DataFrame(
+        threshold_results
+    )
+
+    st.dataframe(
+        threshold_df,
+        use_container_width=True
+    )
+
+    # -----------------------------------------------------
+    # TOP MATCHES
+    # -----------------------------------------------------
+
+    st.subheader("🏆 Top Matching Pairs")
+
+    top_df = threshold_df.sort_values(
+        by="Similarity",
+        ascending=False
+    )
+
+    st.dataframe(
+        top_df.head(10),
+        use_container_width=True
+    )
+
+    # -----------------------------------------------------
     # BAR CHART
-    # --------------------------------------------------
+    # -----------------------------------------------------
 
     st.subheader("📊 Graph 1: Similarity Scores")
 
-    base_text = texts[0]
-
-    bar_df = pd.DataFrame({
-        "Text": texts,
+    base_scores = pd.DataFrame({
+        "Sentence": texts,
         "Similarity": similarity_matrix[0]
     })
 
-    fig_bar = px.bar(
-        bar_df,
-        x="Text",
-        y="Similarity",
-        title=f"Similarity Compared to First Sentence"
+    fig1, ax1 = plt.subplots(figsize=(10, 5))
+
+    ax1.bar(
+        base_scores["Sentence"],
+        base_scores["Similarity"]
     )
 
-    st.plotly_chart(
-        fig_bar,
-        use_container_width=True
+    ax1.set_title(
+        "Similarity Compared to First Sentence"
     )
 
-    # --------------------------------------------------
-    # GRAPH 2
+    plt.xticks(rotation=45)
+
+    st.pyplot(fig1)
+
+    # -----------------------------------------------------
     # HEATMAP
-    # --------------------------------------------------
+    # -----------------------------------------------------
 
     st.subheader("🔥 Graph 2: Similarity Heatmap")
 
-    fig_heatmap = px.imshow(
-        similarity_matrix,
-        x=texts,
-        y=texts,
-        text_auto=".2f",
-        aspect="auto",
-        title="Pairwise Semantic Similarity"
+    fig2, ax2 = plt.subplots(figsize=(10, 6))
+
+    sns.heatmap(
+        sim_df,
+        annot=True,
+        cmap="Blues",
+        ax=ax2
     )
 
-    st.plotly_chart(
-        fig_heatmap,
-        use_container_width=True
-    )
+    st.pyplot(fig2)
 
-    # --------------------------------------------------
-    # GRAPH 3
-    # PCA EMBEDDING
-    # --------------------------------------------------
+    # -----------------------------------------------------
+    # PCA
+    # -----------------------------------------------------
 
-    st.subheader("🧭 Graph 3: 2D Embedding Visualization")
+    st.subheader("🧭 Graph 3: PCA Embedding Plot")
 
-    pca = PCA(
-        n_components=2
-    )
+    pca = PCA(n_components=2)
 
     reduced = pca.fit_transform(
         embeddings
     )
 
-    pca_df = pd.DataFrame({
-        "PCA1": reduced[:, 0],
-        "PCA2": reduced[:, 1],
-        "Text": texts
+    fig3, ax3 = plt.subplots(
+        figsize=(8, 6)
+    )
+
+    ax3.scatter(
+        reduced[:, 0],
+        reduced[:, 1]
+    )
+
+    for i, txt in enumerate(texts):
+
+        ax3.annotate(
+            txt,
+            (
+                reduced[i, 0],
+                reduced[i, 1]
+            )
+        )
+
+    ax3.set_title(
+        "2D Semantic Embedding Space"
+    )
+
+    st.pyplot(fig3)
+
+    # -----------------------------------------------------
+    # CLASSIFICATION
+    # -----------------------------------------------------
+
+    st.subheader("📊 Similarity Classification")
+
+    similar_count = len(
+        threshold_df[
+            threshold_df["Status"] == "Similar"
+        ]
+    )
+
+    not_similar_count = len(
+        threshold_df[
+            threshold_df["Status"] == "Not Similar"
+        ]
+    )
+
+    pie_df = pd.DataFrame({
+        "Category": [
+            "Similar",
+            "Not Similar"
+        ],
+        "Count": [
+            similar_count,
+            not_similar_count
+        ]
     })
 
-    fig_pca = px.scatter(
-        pca_df,
-        x="PCA1",
-        y="PCA2",
-        text="Text",
-        title="2D Semantic Embedding Space"
+    fig4, ax4 = plt.subplots()
+
+    ax4.pie(
+        pie_df["Count"],
+        labels=pie_df["Category"],
+        autopct="%1.1f%%"
     )
 
-    fig_pca.update_traces(
-        textposition="top center"
+    ax4.set_title(
+        "Similarity Classification"
     )
 
-    st.plotly_chart(
-        fig_pca,
-        use_container_width=True
-    )
+    st.pyplot(fig4)
 
-    # --------------------------------------------------
+    # -----------------------------------------------------
+    # THRESHOLD DECISION
+    # -----------------------------------------------------
+
+    st.subheader("🚦 Threshold Decision")
+
+    if max_score >= threshold:
+
+        st.success(
+            f"""
+Highest Similarity
+({max_score:.4f})
+
+EXCEEDS
+
+Threshold
+({threshold})
+"""
+        )
+
+    else:
+
+        st.error(
+            f"""
+Highest Similarity
+({max_score:.4f})
+
+IS BELOW
+
+Threshold
+({threshold})
+"""
+        )
+
+    # -----------------------------------------------------
     # DOWNLOAD
-    # --------------------------------------------------
+    # -----------------------------------------------------
 
-    st.subheader("Download Results")
+    st.subheader("📥 Download Results")
 
     csv = sim_df.to_csv()
 
     st.download_button(
-        label="📥 Download Similarity Matrix CSV",
+        label="Download Similarity Matrix",
         data=csv,
         file_name="similarity_matrix.csv",
         mime="text/csv"
     )
 
-    # --------------------------------------------------
-    # CRITICAL THINKING
-    # --------------------------------------------------
+    # -----------------------------------------------------
+    # PAUL'S CRITICAL THINKING
+    # -----------------------------------------------------
 
-    st.subheader("Paul's Critical Thinking Standards")
+    st.subheader("📖 Paul's Critical Thinking Standards")
 
     with st.expander("View Analysis"):
 
         st.markdown(f"""
 ### Clarity
-The user entered **{len(texts)}** sentences and the model calculated semantic similarity between them.
+The user entered {len(texts)} sentences and the system measured semantic similarity.
 
 ### Accuracy
-The analysis uses the pretrained NLP model **all-MiniLM-L6-v2**.
+The pretrained model used is all-MiniLM-L6-v2.
 
 ### Precision
-The highest similarity score obtained was **{max_score:.4f}**.
+The highest similarity score is {max_score:.4f}.
 
 ### Relevance
-The heatmap, bar chart, and embedding plot directly support the similarity results.
+The dashboard, charts, and matrix directly support the similarity analysis.
 
 ### Logic
-Sentences with related meanings receive higher similarity scores and appear closer in the embedding space.
+Sentences with related meanings receive higher similarity scores.
 
 ### Significance
-The most significant relationship was found between:
+The most important result is the strongest matching pair:
 
 **{best_pair[0]}**
 
@@ -303,5 +445,10 @@ and
 **{best_pair[1]}**
 
 ### Fairness
-The pretrained model may not fully understand domain-specific knowledge and may inherit biases from training data.
+The model may not fully understand specialized domains and may inherit bias from training data.
+
+### Threshold Used
+The selected threshold is {threshold}.
+Similarity scores above this value are considered semantically related.
 """)
+```
