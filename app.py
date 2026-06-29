@@ -451,4 +451,4 @@ The model may not fully understand specialized domains and may inherit bias from
 The selected threshold is {threshold}.
 Similarity scores above this value are considered semantically related.
 """)
-```
+
