@@ -1,6 +1,6 @@
 # app.py
 
-```python
+
 import streamlit as st
 from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
