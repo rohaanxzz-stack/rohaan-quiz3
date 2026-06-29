@@ -3,5 +3,6 @@ sentence-transformers
 scikit-learn
 pandas
 numpy
-plotly
+matplotlib
+seaborn
 torch
