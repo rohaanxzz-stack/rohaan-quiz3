@@ -3,29 +3,101 @@ from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.decomposition import PCA
 import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
+import numpy as np
+import plotly.express as px
 
-st.title("NLP Text Similarity Analyzer")
+# --------------------------------------------------
+# PAGE CONFIG
+# --------------------------------------------------
 
-model = SentenceTransformer('all-MiniLM-L6-v2')
+st.set_page_config(
+    page_title="Semantic Similarity Analyzer",
+    page_icon="🧠",
+    layout="wide"
+)
 
-st.write("Enter multiple words/sentences (one per line):")
+# --------------------------------------------------
+# TITLE
+# --------------------------------------------------
+
+st.title("🧠 Semantic Similarity Analyzer")
+st.markdown("""
+Analyze semantic similarity between words, sentences, and short text using a
+free pretrained NLP model.
+
+**Model:** all-MiniLM-L6-v2
+""")
+
+# --------------------------------------------------
+# SIDEBAR
+# --------------------------------------------------
+
+st.sidebar.header("About")
+
+st.sidebar.info("""
+This application uses the pretrained
+Sentence Transformer model:
+
+all-MiniLM-L6-v2
+
+No preprocessing.
+No model training.
+No paid API.
+""")
+
+# --------------------------------------------------
+# INPUT
+# --------------------------------------------------
+
+default_text = """Artificial Intelligence is transforming education.
+Machine Learning helps computers learn from data.
+Deep Learning is a branch of AI.
+Cats are domestic animals.
+Dogs are loyal companions."""
 
 user_input = st.text_area(
-    "Input Text",
-    "cat\nkitten\ndog\nanimal\ncar"
+    "Enter one sentence per line",
+    default_text,
+    height=220
 )
+
+# --------------------------------------------------
+# MODEL
+# --------------------------------------------------
+
+@st.cache_resource
+def load_model():
+    return SentenceTransformer("all-MiniLM-L6-v2")
+
+model = load_model()
+
+# --------------------------------------------------
+# BUTTON
+# --------------------------------------------------
 
 if st.button("Analyze Similarity"):
 
-    texts = [x.strip() for x in user_input.split("\n") if x.strip()]
+    texts = [
+        line.strip()
+        for line in user_input.split("\n")
+        if line.strip()
+    ]
 
-    embeddings = model.encode(texts)
+    if len(texts) < 2:
+        st.warning("Please enter at least two sentences.")
+        st.stop()
 
-    similarity_matrix = cosine_similarity(embeddings)
+    with st.spinner("Generating embeddings..."):
 
-    st.subheader("Similarity Matrix")
+        embeddings = model.encode(texts)
+
+        similarity_matrix = cosine_similarity(
+            embeddings
+        )
+
+    # --------------------------------------------------
+    # SIMILARITY DATAFRAME
+    # --------------------------------------------------
 
     sim_df = pd.DataFrame(
         similarity_matrix,
@@ -33,99 +105,203 @@ if st.button("Analyze Similarity"):
         columns=texts
     )
 
-    st.dataframe(sim_df)
+    # --------------------------------------------------
+    # FIND BEST PAIR
+    # --------------------------------------------------
 
-    # -------------------------
-    # Graph 1: Bar Chart
-    # -------------------------
+    max_score = -1
+    best_pair = ("", "")
 
-    st.subheader("Graph 1: Top Similarities")
+    for i in range(len(texts)):
+        for j in range(i + 1, len(texts)):
+
+            if similarity_matrix[i][j] > max_score:
+                max_score = similarity_matrix[i][j]
+
+                best_pair = (
+                    texts[i],
+                    texts[j]
+                )
+
+    # --------------------------------------------------
+    # METRICS
+    # --------------------------------------------------
+
+    col1, col2, col3 = st.columns(3)
+
+    col1.metric(
+        "Total Sentences",
+        len(texts)
+    )
+
+    col2.metric(
+        "Embedding Size",
+        embeddings.shape[1]
+    )
+
+    col3.metric(
+        "Highest Similarity",
+        f"{max_score:.4f}"
+    )
+
+    st.success(
+        f"""
+Most Similar Pair:
+
+'{best_pair[0]}'
+
+and
+
+'{best_pair[1]}'
+
+Similarity Score: {max_score:.4f}
+"""
+    )
+
+    # --------------------------------------------------
+    # TABLE
+    # --------------------------------------------------
+
+    st.subheader("Similarity Matrix")
+
+    st.dataframe(
+        sim_df,
+        use_container_width=True
+    )
+
+    # --------------------------------------------------
+    # GRAPH 1
+    # BAR CHART
+    # --------------------------------------------------
+
+    st.subheader("📊 Graph 1: Similarity Scores")
 
     base_text = texts[0]
 
-    scores = similarity_matrix[0]
-
     bar_df = pd.DataFrame({
         "Text": texts,
-        "Similarity": scores
+        "Similarity": similarity_matrix[0]
     })
 
-    fig1, ax1 = plt.subplots()
-    ax1.bar(bar_df["Text"], bar_df["Similarity"])
-    ax1.set_title("Similarity with First Input")
-    plt.xticks(rotation=45)
-
-    st.pyplot(fig1)
-
-    # -------------------------
-    # Graph 2: Heatmap
-    # -------------------------
-
-    st.subheader("Graph 2: Heatmap")
-
-    fig2, ax2 = plt.subplots(figsize=(8, 6))
-
-    sns.heatmap(
-        sim_df,
-        annot=True,
-        cmap="Blues",
-        ax=ax2
+    fig_bar = px.bar(
+        bar_df,
+        x="Text",
+        y="Similarity",
+        title=f"Similarity Compared to First Sentence"
     )
 
-    st.pyplot(fig2)
-
-    # -------------------------
-    # Graph 3: PCA Plot
-    # -------------------------
-
-    st.subheader("Graph 3: 2D Embedding Plot")
-
-    pca = PCA(n_components=2)
-
-    reduced = pca.fit_transform(embeddings)
-
-    fig3, ax3 = plt.subplots()
-
-    ax3.scatter(
-        reduced[:, 0],
-        reduced[:, 1]
+    st.plotly_chart(
+        fig_bar,
+        use_container_width=True
     )
 
-    for i, txt in enumerate(texts):
-        ax3.annotate(
-            txt,
-            (reduced[i, 0], reduced[i, 1])
-        )
+    # --------------------------------------------------
+    # GRAPH 2
+    # HEATMAP
+    # --------------------------------------------------
 
-    st.pyplot(fig3)
+    st.subheader("🔥 Graph 2: Similarity Heatmap")
 
-    # -------------------------
-    # Critical Thinking
-    # -------------------------
+    fig_heatmap = px.imshow(
+        similarity_matrix,
+        x=texts,
+        y=texts,
+        text_auto=".2f",
+        aspect="auto",
+        title="Pairwise Semantic Similarity"
+    )
+
+    st.plotly_chart(
+        fig_heatmap,
+        use_container_width=True
+    )
+
+    # --------------------------------------------------
+    # GRAPH 3
+    # PCA EMBEDDING
+    # --------------------------------------------------
+
+    st.subheader("🧭 Graph 3: 2D Embedding Visualization")
+
+    pca = PCA(
+        n_components=2
+    )
+
+    reduced = pca.fit_transform(
+        embeddings
+    )
+
+    pca_df = pd.DataFrame({
+        "PCA1": reduced[:, 0],
+        "PCA2": reduced[:, 1],
+        "Text": texts
+    })
+
+    fig_pca = px.scatter(
+        pca_df,
+        x="PCA1",
+        y="PCA2",
+        text="Text",
+        title="2D Semantic Embedding Space"
+    )
+
+    fig_pca.update_traces(
+        textposition="top center"
+    )
+
+    st.plotly_chart(
+        fig_pca,
+        use_container_width=True
+    )
+
+    # --------------------------------------------------
+    # DOWNLOAD
+    # --------------------------------------------------
+
+    st.subheader("Download Results")
+
+    csv = sim_df.to_csv()
+
+    st.download_button(
+        label="📥 Download Similarity Matrix CSV",
+        data=csv,
+        file_name="similarity_matrix.csv",
+        mime="text/csv"
+    )
+
+    # --------------------------------------------------
+    # CRITICAL THINKING
+    # --------------------------------------------------
 
     st.subheader("Paul's Critical Thinking Standards")
 
-    highest_score = sim_df.iloc[0, 1:].max()
+    with st.expander("View Analysis"):
 
-    st.markdown(f"""
+        st.markdown(f"""
 ### Clarity
-Input texts were analyzed using a pretrained NLP model.
+The user entered **{len(texts)}** sentences and the model calculated semantic similarity between them.
 
 ### Accuracy
-Model Used: all-MiniLM-L6-v2.
+The analysis uses the pretrained NLP model **all-MiniLM-L6-v2**.
 
 ### Precision
-Highest similarity score: **{highest_score:.4f}**
+The highest similarity score obtained was **{max_score:.4f}**.
 
 ### Relevance
-Graphs directly visualize similarity relationships.
+The heatmap, bar chart, and embedding plot directly support the similarity results.
 
 ### Logic
-Texts with similar meanings appear closer and receive higher scores.
+Sentences with related meanings receive higher similarity scores and appear closer in the embedding space.
 
 ### Significance
-The most important result is the highest similarity pair.
+The most significant relationship was found between:
+
+**{best_pair[0]}**
+
+and
+
+**{best_pair[1]}**
 
 ### Fairness
-The model may not fully understand domain-specific or cultural context.
+The pretrained model may not fully understand domain-specific knowledge and may inherit biases from training data.
 """)
